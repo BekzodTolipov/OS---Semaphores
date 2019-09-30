@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <fcntl.h>
-#include <semaphore.h>
+#include <sys/sem.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -13,11 +13,16 @@
 #include <signal.h>
 #include <string.h>
 #include <stdarg.h> 
+#include <sys/types.h>
 
 void fix_time();
 static int setupinterrupt();
 static void myhandler(int s);
 void strfcat(char *fmt, ...);
+void sem_clock_lock();
+void sem_clock_release();
+void sem_print_lock();
+void sem_print_release();
 
 struct Clock{
     int sec;
@@ -33,12 +38,12 @@ int sec;
 int ns;
 char *shmMsg;
 struct Clock *clock_point;
-sem_t *semaphore;
-sem_t *print_sem;
+//int semaphore;
+//int print_sem;
 char buffer[2048];
 /////////Semaphore///////////////
 /* semaphore value, for semctl().                */
-union semun sem_val;
+//union semun sem_val;
 
 /* structure for semaphore operations.           */
 struct sembuf sem_op;
@@ -145,7 +150,7 @@ int main(int argc, char *argv[])
 
 			quit = true;
 		}
-		sem_cock_release();
+		sem_clock_release();
 	
 //		if(sem_post(semaphore) < 0){
 //			perror("sem_post(3) error on child");
@@ -200,10 +205,10 @@ static void myhandler(int s){
     printf("Child Termination\n");
 	shmdt(shmMsg);
     shmdt(clock_point);
-	if (sem_close(semaphore) < 0)
-        perror("sem_close(3) failed child\n");
-    if(sem_close(print_sem) < 0)
-        perror("Sem_close(3) failed child\n");
+//	if (sem_close(semaphore) < 0)
+//        perror("sem_close(3) failed child\n");
+//    if(sem_close(print_sem) < 0)
+//        perror("Sem_close(3) failed child\n");
 
 	exit(1);
 }

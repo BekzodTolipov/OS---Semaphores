@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
-#include <sys/mman.h>
+#include <sys/types.h>
 #include <string.h>
 #include <math.h>
 #include <sys/ipc.h> 
@@ -72,7 +72,7 @@ struct Clock *clock_point;
 
 /////////Semaphore///////////////
 /* semaphore value, for semctl().                */
-union semun sem_val;
+//union semun sem_val;
 
 /* structure for semaphore operations.           */
 struct sembuf sem_op;
