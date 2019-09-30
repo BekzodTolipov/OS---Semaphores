@@ -9,7 +9,7 @@ EXE = $(EXE_1) $(EXE_2)
 EXE_1 = oss
 EXE_2 = user
 WITHNAME = -o
-CFLAGS=-c
+CFLAGS= -Wall -c
 SEM = -lpthread
 
 .SUFFIXES: .c .o
