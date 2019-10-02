@@ -108,6 +108,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to open the file, terminating program\n");
 		return 1;
 	}
+	setvbuf(fptr, NULL, _IONBF, 0);
 
 	// ftok to generate unique key 
 	key_t key = ftok("./oss.c", 21);  
@@ -115,13 +116,31 @@ int main(int argc, char **argv)
 	key_t key_3 = ftok("./oss.c", 23);
 	key_t key_4 = ftok("./oss.c", 24);
 
-	// shmget returns an identifier i`n shmid 
-	int shmid = shmget(key,sizeof(struct Clock),0644 | IPC_CREAT); 
+	// shmget returns an identifier 
+	int shmid = shmget(key,sizeof(struct Clock),0644 | IPC_CREAT);
+	if(shmid < 0){
+		fprintf(stderr, "shmget failed on first key");
+		return 1;
+	}
 	int shmid_2 = shmget(key_2, 2048,0666 | IPC_CREAT);
+	if(shmid_2 < 0){
+		fprintf(stderr, "shmget failed on second key");
+        return 1;
+
+	}
 	int shmid_3 = shmget(key_4, sizeof(int), 0666 | IPC_CREAT);
+	if(shmid_3 < 0){
+        fprintf(stderr, "shmget failed on 4th key");
+        return 1;
+    }
+
 	// shmat to attach to shared memory 
 	clock_point = shmat(shmid,NULL,0);
-	shmMsg = shmat(shmid_2,NULL,0); 
+	shmMsg = shmat(shmid_2,NULL,0);
+	if(shmMsg == (char*)-1){
+		fprintf(stderr, "shmat failed on shared message");
+		return 1;
+	}
 	check_permission = shmat(shmid_3, NULL, 0);
 	
 	//Set up starter values for clock and message signal
@@ -131,6 +150,10 @@ int main(int argc, char **argv)
  	
 	// We initialize the semaphore id
 	sem_id = semget(key_3, 2, IPC_CREAT | IPC_EXCL | 0666);
+	if(sem_id == -1){
+		fprintf(stderr, "ERROR: Failed semget");
+		return 1;
+	}
 	// Now we will set up 2 semaphores
 	semctl(sem_id, 0, SETVAL, 1);
 	semctl(sem_id, 1, SETVAL, 1);
@@ -149,8 +172,9 @@ int main(int argc, char **argv)
     }
 
 	int i;
-    for(i=0; i<20; i++)	//Initialize array to zero's
+    for(i=0; i<20; i++){	//Initialize array to zero's
 			child_arr[i] = 0;
+	}
 
     int child_pid;
     int count = 0;
@@ -165,17 +189,15 @@ int main(int argc, char **argv)
 			forked_kids_total++;
 			// Check if total processes reached 100
 			if(forked_kids_total >= 100){
-				printf("Max reached\n");
 				max_reached = true;
 				hundred_or_time = 1;
-				break;
+				quit = true;
 			}
 			// Check if simulated time reached 2 seconds
 			if(clock_point->sec > 2){
-				printf("Reached max time\n");
 				max_reached = true;
 				hundred_or_time = 1;
-				break;
+				quit = true;
 			}
         }
 
@@ -184,7 +206,6 @@ int main(int argc, char **argv)
         }
         else if(child_pid == -1){	// If fork failed than output necessary message
             perror("Error: Fork() failed\n");
-
         }
         else {
             found = false;
@@ -200,7 +221,7 @@ int main(int argc, char **argv)
                         count++;
                         break;
                     }
-               }
+                }
             }
 		}
 		int stat;
@@ -221,7 +242,7 @@ int main(int argc, char **argv)
         sem_clock_lock();
 
         //increment seconds
-        clock_point->ns += 10000;
+        clock_point->ns += 1000;
         fix_time();
 		// Release the critical section
         sem_clock_release();
@@ -231,16 +252,16 @@ int main(int argc, char **argv)
 			strcpy(shmMsg, "\0");
 			*check_permission = 0;
 		}
-
-
     }
 	// If oss loop got termincated by reaching either 100 kids or 2 seconds simulated time
 	// will terminated all existing kids
 	if(max_reached){
-		if(hundred_or_time == 1)
+		if(hundred_or_time == 1){
 			fprintf(stderr, "\nWARNING: Hundred processes\n");
-		else
+		}
+		else{
 			fprintf(stderr, "\nWARNING: 2 second time reached\n");
+		}
 		int i;
 	    for(i=0; i<20; i++){
 			if(child_arr[i] != 0){
