@@ -51,13 +51,13 @@ static bool quit;
 char *shmMsg;
 
 /////////////////////
-void on_sigusr1(int sig){
+//void on_sigusr1(int sig){
     // Note: Normally, it's not safe to call almost all library functions in a
   // signal handler, since the signal may have been received in a middle of a
    // call to that function.
-	printf("Message: %s\n", shmMsg);
-	strcpy(shmMsg, "\0");
-}
+//	printf("Message: %s\n", shmMsg);
+//	strcpy(shmMsg, "\0");
+//}
 
 /////////////////////
 
@@ -69,6 +69,7 @@ struct Clock{
 };
 
 struct Clock *clock_point;
+int *check_permission;
 
 /////////Semaphore///////////////
 /* semaphore value, for semctl().                */
@@ -84,13 +85,13 @@ int main(int argc, char **argv)
 {
 	char file_name[MAXCHAR] = "log.dat";
 	char dummy[MAXCHAR];
-	int numb_child = 2;
+	int numb_child = 5;
 	int max_time = 5;
 	int c;
-	short  sarray[] = { 0, 0 };
-	int *p;                       /*      shared variable         *//*shared */
+	//short  sarray[] = { 0, 0 };
+//	int *p;                       /*      shared variable         *//*shared */
 //	sem_t *sem;                   /*      synch semaphore         *//*shared */
-	unsigned int value = 1;           /*      semaphore value         */
+//	unsigned int value = 1;           /*      semaphore value         */
 	quit = false;
 	
 	parent_pid = getpid();
@@ -105,8 +106,10 @@ int main(int argc, char **argv)
 			case 's':
 				strncpy(dummy, optarg, 255);
                 numb_child = toint(dummy);
-                if(numb_child > 20)
+                if(numb_child > 20 || numb_child < 1){
+					fprintf(stderr, "ERROR: number of children should between 1 and 20");
 					abort();
+				}
 				break;
 			case 'l':
 				strncpy(file_name, optarg, 255);
@@ -122,7 +125,11 @@ int main(int argc, char **argv)
 		}
 	}
 
-	signal(SIGUSR1, &on_sigusr1);
+	FILE *fptr;
+	fptr = fopen(file_name, "w");
+
+	//setvbuf();
+//	signal(SIGUSR1, &on_sigusr1);
 
 	// ftok to generate unique key 
 	key_t key = ftok("./oss.c", 21);  
@@ -130,17 +137,21 @@ int main(int argc, char **argv)
 	key_t key_2 = ftok("./oss.c", 22);
 //	printf("Key-2: %d", key_2);
 	key_t key_3 = ftok("./oss.c", 23);
+	key_t key_4 = ftok("./oss.c", 24);
 
 	//sleep(10);
 	// shmget returns an identifier i`n shmid 
-	int shmid = shmget(key,sizeof(struct Clock),0644|IPC_CREAT); 
-	int shmid_2 = shmget(key_2, 2048,0666|IPC_CREAT);
+	int shmid = shmget(key,sizeof(struct Clock),0644 | IPC_CREAT); 
+	int shmid_2 = shmget(key_2, 2048,0666 | IPC_CREAT);
+	int shmid_3 = shmget(key_4, sizeof(int), 0666 | IPC_CREAT);
 	// shmat to attach to shared memory 
 	clock_point = shmat(shmid,NULL,0);
 //	char buffer[1024];
 	shmMsg = shmat(shmid_2,NULL,0); 
+	check_permission = shmat(shmid_3, NULL, 0);
   
-
+	*check_permission = 0;
+	printf("Value of permission: %d\n", *check_permission);
 	clock_point->sec = 0;
 	clock_point->ns = 0;
  	
@@ -178,7 +189,7 @@ int main(int argc, char **argv)
 //        exit(EXIT_FAILURE);
 //    }
 
-    if(setuptimer(10) == -1){
+    if(setuptimer(max_time) == -1){
        //  fprintf(fwrite, "ERROR: Failed set up timer");
          fprintf(stderr, "ERROR: Failed set up timer");
        //  fclose(fp);
@@ -199,21 +210,29 @@ int main(int argc, char **argv)
 
     int child_pid;
     int count = 0;
-    int after_rem = 0;
+   // int after_rem = 0;
     int forked_kids_total = 0;
 
     bool found = false;
+	bool max_reached = false;
+	int hundred_or_time = 0;
     while(!quit){
 
         if(count < numb_child){
             child_pid = fork();
-        //  forked_kids_total++;
-        //  if(forked_kids_total >= 100){
-        //      printf("Max reached");
-        //      union sigval sig_val;
-        //      sigqueue(getpid(), SIGALRM, sig_val);
-        //      quit = true;
-        //  }
+			forked_kids_total++;
+			if(forked_kids_total >= 100){
+				printf("Max reached\n");
+				max_reached = true;
+				hundred_or_time = 1;
+				break;
+			}
+			if(clock_point->sec > 2){
+				printf("Reached max time\n");
+				max_reached = true;
+				hundred_or_time = 1;
+				break;
+			}
         }
 
         if (child_pid == 0) {
@@ -257,24 +276,58 @@ int main(int argc, char **argv)
         sem_clock_lock();
 
         //increment seconds
-        clock_point->sec += 1;
+        clock_point->ns += 1;
         fix_time();
 
         sem_clock_release();
 
+		if(*check_permission == 1){
+			fprintf(fptr, "\nMaster: Child pid is terminating at my time %d.%d because %s\n", clock_point->sec, clock_point->ns, shmMsg);
+			strcpy(shmMsg, "\0");
+			*check_permission = 0;
+		}
+
 
     }
+
+	if(max_reached){
+		if(hundred_or_time == 1)
+			fprintf(stderr, "\nWARNING: Hundred processes\n");
+		else
+			fprintf(stderr, "\nWARNING: 2 second time reached\n");
+		int i;
+	    for(i=0; i<20; i++){
+			if(child_arr[i] != 0){
+				if(kill(child_arr[i], 0) == 0){
+					if(kill(child_arr[i], SIGTERM) != 0){
+						perror("Child can't be terminated for unkown reason\n");
+					}
+				}
+			}
+		}
+
+
+		for(i=0;i<20;i++){
+			if(child_arr[i] != 0){
+				waitpid(child_arr[i], NULL, 0);
+        //  printf("PARENT: Child: %d returned value is: %d\n", child_arr[i], WIFSIGNALED(child_arr[i]));
+			}
+		}
+		//fprintf(stderr, "Max time/Max process reached\n");
+	}
 	
-	printf("Freeing memories\n");
+	printf("\nFreeing memories\n", clock_point->sec);
     shmdt(clock_point);
     shmdt(shmMsg);
+	shmdt(check_permission);
     shmctl(shmid, IPC_RMID, NULL);
     shmctl(shmid_2, IPC_RMID, NULL);
+	shmctl(shmid_3, IPC_RMID, NULL);
     /* cleanup semaphores */
     semctl(sem_id, 0, IPC_RMID);
     semctl(sem_id, 1, IPC_RMID);
-
-
+	//Close memory
+	fclose(fptr);
     return 0;
 
 
@@ -524,7 +577,7 @@ static int setupinterrupt(){
 
 /* Set up my own handler */
 static void myhandler(int s){
-	printf("Termination begin\n");
+	fprintf(stderr, "\n!!!Termination begin since timer reached its time!!!\n");
 	int i;
 	for(i=0; i<20; i++){
 		if(child_arr[i] != 0){
@@ -540,7 +593,7 @@ static void myhandler(int s){
 	for(i=0;i<20;i++){
 		if(child_arr[i] != 0){
 			waitpid(child_arr[i], NULL, 0);
-			printf("PARENT: Child: %d returned value is: %d\n", child_arr[i], WIFSIGNALED(child_arr[i]));
+		//	printf("PARENT: Child: %d returned value is: %d\n", child_arr[i], WIFSIGNALED(child_arr[i]));
 		}
 	}
 
