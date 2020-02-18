@@ -1,11 +1,13 @@
+# Semaphores
+
 This program will demonstrate simple interprocess communication by using system calls(fork, exec, shared memory, and semaphores)
 
 oss main executable use command line arguments and following command line arguments are availabe using getopt:
 
--h		// Help statement
--s x		// Maximum number of processes between 20 and 1
--l filename	// File name
--t z		// Timer interrupt
+	-h		// Help statement
+	-s x		// Maximum number of processes between 20 and 1
+	-l filename	// File name
+	-t z		// Timer interrupt
 
 
 Program will start the operating system simulator (oss) as one main process which will start by forking a number of processes 
